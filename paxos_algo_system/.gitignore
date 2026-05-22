@@ -1,0 +1,7 @@
+# Ignore run_tiapp.sh script
+*.sh
+*.class
+*.log*
+*.nfs*
+metrics.csv
+.venv
