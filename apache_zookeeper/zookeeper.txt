@@ -1,0 +1,11 @@
+
+deleteall /dist38
+
+create /dist38 ""
+create /dist38/tasks ""
+create /dist38/workers ""
+create /dist38/assignments ""
+
+export ZOOBINDIR=/home/2023/kwehbe2/apache-zookeeper-3.8.5-bin/bin
+
+~/apache-zookeeper-3.8.5-bin/bin/zkCli.sh -server tr-open-07.cs.mcgill.ca:21838,tr-open-08.cs.mcgill.ca:21838,tr-open-09.cs.mcgill.ca:21838

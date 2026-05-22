@@ -1,0 +1,16 @@
+#!/bin/bash
+
+if [[ -z "$ZOOBINDIR" ]]
+then
+    echo "Error!! ZOOBINDIR is not set" 1>&2
+    exit 1
+fi
+
+. $ZOOBINDIR/zkEnv.sh
+
+# TODO Include your ZooKeeper connection string here. Make sure there are no spaces.
+# 	Replace with your server names and client ports.
+export ZKSERVER=tr-open-07.cs.mcgill.ca:21838,tr-open-08.cs.mcgill.ca:21838,tr-open-09.cs.mcgill.ca:21838
+# export ZKSERVER=open-gpu-XX.cs.mcgill.ca:218XX,open-gpu-XX.cs.mcgill.ca:218XX,open-gpu-XX.cs.mcgill.ca:218XX
+
+java -cp $CLASSPATH:../task:.: DistClient "$@"
