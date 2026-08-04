@@ -46,6 +46,24 @@ public class Customer extends RMItem
 		m_reservations.put(reservedItem.getKey(), reservedItem);
 	}
 
+	public boolean cancelReservation(String key)
+	{
+		ReservedItem reservedItem = getReservedItem(key);
+		if (reservedItem == null)
+		{
+			return false;
+		}
+		if (reservedItem.getCount() <= 1)
+		{
+			m_reservations.remove(reservedItem.getKey());
+		}
+		else
+		{
+			reservedItem.setCount(reservedItem.getCount() - 1);
+		}
+		return true;
+	}
+
 	public ReservedItem getReservedItem(String key)
 	{
 		return (ReservedItem)m_reservations.get(key);

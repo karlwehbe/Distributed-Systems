@@ -276,6 +276,12 @@ public class TCP_Middleware {
 
     // Bundle reservation handling method
     public synchronized TCPMessage handleBundle(TCPMessage request) {
+        Vector<Integer> reservedFlights = new Vector<>();
+        boolean carReserved = false;
+        boolean roomReserved = false;
+        int customerID = -1;
+        String location = null;
+
         try {
             Vector<String> params = request.getParameters();
             
@@ -284,7 +290,7 @@ public class TCP_Middleware {
                 return new TCPMessage(false);
             }
             
-            int customerID = Integer.parseInt(params.elementAt(0));
+            customerID = Integer.parseInt(params.elementAt(0));
             
             if (!customers.containsKey(customerID)) {
                 System.err.println("Customer ID " + customerID + " not found");
@@ -297,7 +303,7 @@ public class TCP_Middleware {
                 flightNumbers.add(Integer.parseInt(params.elementAt(i)));
             }
             
-            String location = params.elementAt(params.size() - 3);
+            location = params.elementAt(params.size() - 3);
             boolean bookCar = Integer.parseInt(params.elementAt(params.size() - 2)) == 1;
             boolean bookRoom = Integer.parseInt(params.elementAt(params.size() - 1)) == 1;
             
@@ -306,12 +312,46 @@ public class TCP_Middleware {
                              ", location: " + location + 
                              ", bookCar: " + bookCar + 
                              ", bookRoom: " + bookRoom);
-            
+
+            // Phase 1: check availability of every resource before reserving anything
+            for (int flightNum : flightNumbers) {
+                Vector<String> queryParams = new Vector<>();
+                queryParams.add(String.valueOf(flightNum));
+                TCPMessage queryRequest = new TCPMessage("queryFlight", queryParams);
+                TCPMessage queryResponse = flights_TCP_proxy.send_TCP_request(queryRequest);
+                if (queryResponse == null || queryResponse.getIntResponse() <= 0) {
+                    System.err.println("Bundle aborted: flight " + flightNum + " unavailable");
+                    return new TCPMessage(false);
+                }
+            }
+
+            if (bookCar) {
+                Vector<String> queryParams = new Vector<>();
+                queryParams.add(location);
+                TCPMessage queryRequest = new TCPMessage("queryCars", queryParams);
+                TCPMessage queryResponse = cars_TCP_proxy.send_TCP_request(queryRequest);
+                if (queryResponse == null || queryResponse.getIntResponse() <= 0) {
+                    System.err.println("Bundle aborted: cars at " + location + " unavailable");
+                    return new TCPMessage(false);
+                }
+            }
+
+            if (bookRoom) {
+                Vector<String> queryParams = new Vector<>();
+                queryParams.add(location);
+                TCPMessage queryRequest = new TCPMessage("queryRooms", queryParams);
+                TCPMessage queryResponse = rooms_TCP_proxy.send_TCP_request(queryRequest);
+                if (queryResponse == null || queryResponse.getIntResponse() <= 0) {
+                    System.err.println("Bundle aborted: rooms at " + location + " unavailable");
+                    return new TCPMessage(false);
+                }
+            }
+
             Vector<Integer> flightPrices = new Vector<>();
             int carPrice = 0;
             int roomPrice = 0;
             
-            // Reserve all flights first
+            // Phase 2: reserve all resources; roll back on any failure
             for (int flightNum : flightNumbers) {
                 Vector<String> priceParams = new Vector<>();
                 priceParams.add(String.valueOf(flightNum));
@@ -328,11 +368,12 @@ public class TCP_Middleware {
                 
                 if (flightResponse == null || !flightResponse.getBoolResponse()) {
                     System.err.println("Failed to reserve flight " + flightNum + " for customer " + customerID);
+                    rollbackBundle(customerID, reservedFlights, carReserved, roomReserved, location);
                     return new TCPMessage(false);
                 }
+                reservedFlights.add(flightNum);
             }
             
-            // Reserve car if true
             if (bookCar) {
                 Vector<String> priceParams = new Vector<>();
                 priceParams.add(location);
@@ -348,11 +389,12 @@ public class TCP_Middleware {
                 
                 if (carResponse == null || !carResponse.getBoolResponse()) {
                     System.err.println("Failed to reserve car at " + location + " for customer " + customerID);
+                    rollbackBundle(customerID, reservedFlights, carReserved, roomReserved, location);
                     return new TCPMessage(false);
                 }
+                carReserved = true;
             }
             
-            // Reserve room if true
             if (bookRoom) {
                 Vector<String> priceParams = new Vector<>();
                 priceParams.add(location);
@@ -368,11 +410,13 @@ public class TCP_Middleware {
                 
                 if (roomResponse == null || !roomResponse.getBoolResponse()) {
                     System.err.println("Failed to reserve room at " + location + " for customer " + customerID);
+                    rollbackBundle(customerID, reservedFlights, carReserved, roomReserved, location);
                     return new TCPMessage(false);
                 }
+                roomReserved = true;
             }
             
-            // Update customer's reservations in middleware with actual prices
+            // Phase 3: only update middleware customer state after full success
             Customer customer = customers.get(customerID);
             for (int i = 0; i < flightNumbers.size(); i++) {
                 int flightNum = flightNumbers.elementAt(i);
@@ -392,7 +436,50 @@ public class TCP_Middleware {
         } catch (Exception e) {
             System.err.println("Error processing bundle reservation: " + e.getMessage());
             e.printStackTrace();
+            rollbackBundle(customerID, reservedFlights, carReserved, roomReserved, location);
             return new TCPMessage(false);
+        }
+    }
+
+    private void rollbackBundle(int customerID, Vector<Integer> reservedFlights,
+                                boolean carReserved, boolean roomReserved, String location) {
+        if (customerID < 0) {
+            return;
+        }
+
+        System.err.println("Rolling back partial bundle for customer " + customerID);
+
+        for (int flightNum : reservedFlights) {
+            try {
+                Vector<String> params = new Vector<>();
+                params.add(String.valueOf(customerID));
+                params.add(String.valueOf(flightNum));
+                flights_TCP_proxy.send_TCP_request(new TCPMessage("cancelFlight", params));
+            } catch (Exception e) {
+                System.err.println("Failed to cancel flight " + flightNum + " during rollback: " + e.getMessage());
+            }
+        }
+
+        if (carReserved && location != null) {
+            try {
+                Vector<String> params = new Vector<>();
+                params.add(String.valueOf(customerID));
+                params.add(location);
+                cars_TCP_proxy.send_TCP_request(new TCPMessage("cancelCar", params));
+            } catch (Exception e) {
+                System.err.println("Failed to cancel car during rollback: " + e.getMessage());
+            }
+        }
+
+        if (roomReserved && location != null) {
+            try {
+                Vector<String> params = new Vector<>();
+                params.add(String.valueOf(customerID));
+                params.add(location);
+                rooms_TCP_proxy.send_TCP_request(new TCPMessage("cancelRoom", params));
+            } catch (Exception e) {
+                System.err.println("Failed to cancel room during rollback: " + e.getMessage());
+            }
         }
     }
 

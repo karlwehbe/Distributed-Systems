@@ -373,6 +373,51 @@ public class ResourceManager implements IResourceManager
 		return reserveItem(customerID, Room.getKey(location), location);
 	}
 
+	// Cancel one reservation of an item for this customer
+	protected boolean cancelItem(int customerID, String key)
+	{
+		Trace.info("RM::cancelItem(customer=" + customerID + ", " + key + ") called");
+		Customer customer = (Customer)readData(Customer.getKey(customerID));
+		if (customer == null)
+		{
+			Trace.warn("RM::cancelItem(" + customerID + ", " + key + ") failed--customer doesn't exist");
+			return false;
+		}
+
+		if (!customer.cancelReservation(key))
+		{
+			Trace.warn("RM::cancelItem(" + customerID + ", " + key + ") failed--reservation doesn't exist");
+			return false;
+		}
+		writeData(customer.getKey(), customer);
+
+		ReservableItem item = (ReservableItem)readData(key);
+		if (item != null)
+		{
+			item.setReserved(item.getReserved() - 1);
+			item.setCount(item.getCount() + 1);
+			writeData(item.getKey(), item);
+		}
+
+		Trace.info("RM::cancelItem(" + customerID + ", " + key + ") succeeded");
+		return true;
+	}
+
+	public boolean cancelFlight(int customerID, int flightNum) throws RemoteException
+	{
+		return cancelItem(customerID, Flight.getKey(flightNum));
+	}
+
+	public boolean cancelCar(int customerID, String location) throws RemoteException
+	{
+		return cancelItem(customerID, Car.getKey(location));
+	}
+
+	public boolean cancelRoom(int customerID, String location) throws RemoteException
+	{
+		return cancelItem(customerID, Room.getKey(location));
+	}
+
 	// Reserve bundle 
 	public boolean bundle(int customerId, Vector<String> flightNumbers, String location, boolean car, boolean room) throws RemoteException
 	{

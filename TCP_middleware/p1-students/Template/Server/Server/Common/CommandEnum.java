@@ -25,6 +25,10 @@ public enum CommandEnum {
     reserveCar("reserveCar"),
     reserveRoom("reserveRoom"),
 
+    cancelFlight("cancelFlight"),
+    cancelCar("cancelCar"),
+    cancelRoom("cancelRoom"),
+
     bundle("bundle"),
     quit("quit");
 

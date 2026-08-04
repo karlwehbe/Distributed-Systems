@@ -138,6 +138,24 @@ private void process_message(TCPMessage message, ObjectOutputStream outputBuffer
                 sendResponse(outputBuffer, new TCPMessage(this.reserveRoom(customerID, location)));
                 break;
 
+            case cancelFlight:
+                customerID = Integer.parseInt(params.get(0));
+                flightNum = Integer.parseInt(params.get(1));
+                sendResponse(outputBuffer, new TCPMessage(this.cancelFlight(customerID, flightNum)));
+                break;
+
+            case cancelCar:
+                customerID = Integer.parseInt(params.get(0));
+                location = params.get(1);
+                sendResponse(outputBuffer, new TCPMessage(this.cancelCar(customerID, location)));
+                break;
+
+            case cancelRoom:
+                customerID = Integer.parseInt(params.get(0));
+                location = params.get(1);
+                sendResponse(outputBuffer, new TCPMessage(this.cancelRoom(customerID, location)));
+                break;
+
             case quit:
                 System.out.println("Middleware requested quit. Closing connection.");
                 return;
